@@ -47,6 +47,12 @@ func RunCommand(rw io.ReadWriter, tag Tag, cmd Command, in ...interface{}) ([]by
 	var rh responseHeader
 	var outb []byte
 
+	switch t := rw.(type) {
+	case *TPMReadWriteCloser:
+		t.mutex.Lock()
+		defer t.mutex.Unlock()
+	}
+	
 	for {
 		if _, err := rw.Write(inb); err != nil {
 			return nil, 0, err
