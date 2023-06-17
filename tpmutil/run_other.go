@@ -21,6 +21,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"sync"
 )
 
 // OpenTPM opens a channel to the TPM at the given path. If the file is a
@@ -40,7 +41,7 @@ func OpenTPM(path string) (io.ReadWriteCloser, error) {
 		if err != nil {
 			return nil, err
 		}
-		rwc = io.ReadWriteCloser(f)
+		rwc = NewTPMReadWriteCloser(f)
 	} else if fi.Mode()&os.ModeSocket != 0 {
 		rwc = NewEmulatorReadWriteCloser(path)
 	} else {
@@ -48,6 +49,31 @@ func OpenTPM(path string) (io.ReadWriteCloser, error) {
 	}
 
 	return rwc, nil
+}
+
+// TPMReadWriteCloser extends the ReadWriteCloser with a mutex to allow for
+// enforced serialisation of writes to the Linux TPM interface
+type TPMReadWriteCloser struct {
+	rwc   io.ReadWriteCloser
+	mutex sync.Mutex
+}
+
+func NewTPMReadWriteCloser(f *os.File) *TPMReadWriteCloser {
+	return &TPMReadWriteCloser{
+		rwc: io.ReadWriteCloser(f),
+	}
+}
+
+func (trw *TPMReadWriteCloser) Read(p []byte) (int, error) {
+	return trw.rwc.Read(p)
+}
+
+func (trw *TPMReadWriteCloser) Write(p []byte) (int, error) {
+	return trw.rwc.Write(p)
+}
+
+func (trw *TPMReadWriteCloser) Close() error {
+	return trw.rwc.Close()
 }
 
 // dialer abstracts the net.Dial call so test code can provide its own net.Conn
